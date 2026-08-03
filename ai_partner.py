@@ -96,7 +96,10 @@ if "nature" not in st.session_state:
 if "relationship" not in st.session_state:
     st.session_state.relationship = "主人"
 if "api_key" not in st.session_state:
-    st.session_state.api_key = ""
+    if "OPENAI_API_KEY" in st.secrets:
+        st.session_state.api_key = st.secrets["OPENAI_API_KEY"]  # 优先读取 Streamlit 云端保险柜里的 Key
+    else:
+        st.session_state.api_key = ""  # 如果没配置，就留空
     if "api_key" in get_config_dict():
         st.session_state.api_key = get_config_dict()["api_key"]
 if "stream" not in st.session_state:
