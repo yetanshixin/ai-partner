@@ -42,8 +42,61 @@ def get_user_session_dir(username=None):
     return path
 
 
+# ---------------- 用户个性化配置读写（API key、流式输出、开发者状态） ----------------
+def get_user_config_path(username=None):
+    if not username:
+        username = st.session_state.get("logged_in_user", "guest")
+    path = f"users/{username}"
+    os.makedirs(path, exist_ok=True)
+    return f"{path}/config.json"
+
+
+def load_user_config(username=None):
+    """加载指定用户的个性化设置"""
+    config_path = get_user_config_path(username)
+    default_config = {
+        "user_custom_key": "",
+        "stream": True,
+        "develop_mode": False
+    }
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                default_config.update(data)
+        except Exception:
+            pass
+    return default_config
+
+
+def save_user_config():
+    """保存当前登录用户的个性化设置"""
+    username = st.session_state.get("logged_in_user")
+    if not username or username == "guest":
+        return
+    config_path = get_user_config_path(username)
+    config_data = {
+        "user_custom_key": st.session_state.get("user_custom_key", ""),
+        "stream": st.session_state.get("stream", True),
+        "develop_mode": st.session_state.get("develop_mode", False)
+    }
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        st.error(f"保存配置失败: {e}")
+
+
+def init_user_state(username):
+    """用户登录成功后，初始化并加载该用户的私有配置"""
+    cfg = load_user_config(username)
+    st.session_state.user_custom_key = cfg.get("user_custom_key", "")
+    st.session_state.stream = cfg.get("stream", True)
+    st.session_state.develop_mode = cfg.get("develop_mode", False)
+
+
 # ---------------- 登录与注册模块 ----------------
-invalid_list = ["root"]
+invalid_list = ["root", "admin", "guest"]
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
@@ -61,6 +114,7 @@ if not st.session_state.logged_in_user:
             db = get_users_db()
             if login_user in db and db[login_user] == login_pwd:
                 st.session_state.logged_in_user = login_user
+                init_user_state(login_user)  # 加载该账号的专属配置
                 st.success(f"欢迎回来，{login_user}！")
                 st.rerun()
             else:
@@ -76,8 +130,10 @@ if not st.session_state.logged_in_user:
         if st.button("注册并登录", use_container_width=True, type="primary"):
             if not reg_user or not reg_pwd:
                 st.warning("用户名和密码不能为空！")
-            elif reg_user in invalid_list:
-                st.error("用户名不合法！")
+            elif reg_user.lower() in invalid_list:
+                st.error("此用户名不合法或保留使用！")
+            elif not re.match(r'^[a-zA-Z0-9_\u4e00-\u9fa5]+$', reg_user):
+                st.error("用户名只能包含中文、字母、数字和下划线！")
             elif reg_pwd != reg_pwd_confirm:
                 st.error("两次输入的密码不一致！")
             else:
@@ -88,6 +144,7 @@ if not st.session_state.logged_in_user:
                     db[reg_user] = reg_pwd
                     save_users_db(db)
                     st.session_state.logged_in_user = reg_user
+                    init_user_state(reg_user)  # 初始化新账号配置
                     st.success("注册成功，已自动登录！")
                     st.rerun()
     st.stop()  # 未登录时中断后续代码执行
@@ -178,7 +235,7 @@ def delete_session(session_name):
         st.error(f"删除会话失败: {e}")
 
 
-# ---------------- Session State 状态初始化 ----------------
+# ---------------- Session State 基础状态初始化 ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "nick_name" not in st.session_state:
@@ -200,6 +257,11 @@ if "egg_clicks" not in st.session_state:
 if "develop_mode" not in st.session_state:
     st.session_state.develop_mode = False
 
+# 如果已登录但尚未载入过用户配置，在此进行一次补载
+if st.session_state.logged_in_user and "config_loaded" not in st.session_state:
+    init_user_state(st.session_state.logged_in_user)
+    st.session_state.config_loaded = True
+
 # ---------------- 管理员权限判断与视图选择 ----------------
 is_admin = (st.session_state.logged_in_user == "admin")
 app_mode = "💬 聊天界面"
@@ -215,6 +277,7 @@ with st.sidebar:
             if st.session_state.egg_clicks >= 7 and not st.session_state.develop_mode:
                 st.toast("🎉 彩蛋已触发！现已启用开发者 API key,可以直接对话了！", icon="🔑", duration="infinite")
                 st.session_state.develop_mode = True
+                save_user_config()  # 保存开发者彩蛋激活状态
     with col_title:
         st.markdown(f"`{st.session_state.logged_in_user}`" + (" 👑" if is_admin else ""))
 
@@ -245,7 +308,7 @@ with st.sidebar:
         # 角色信息与自定义系统提示词模式
         st.subheader("角色设置")
 
-        # 使用 key 自动双向绑定！无需再手动赋值，且点一下即可响应加载的历史配置
+        # 使用 key 自动双向绑定
         st.checkbox("自定义模式", key="custom_prompt_mode")
 
         if st.session_state.custom_prompt_mode:
@@ -277,23 +340,26 @@ with st.sidebar:
         with st.expander('高级配置'):
             input_key = st.text_input("输入 API key", value=st.session_state.user_custom_key, placeholder="sk-xxx",
                                       type="password")
-            if input_key:
-                if input_key.startswith("sk-") or input_key == "API key":
+            if input_key != st.session_state.user_custom_key:
+                if not input_key or input_key.startswith("sk-") or input_key == "API key":
                     st.session_state.user_custom_key = input_key
+                    save_user_config()  # 保存改动后的 API key
                 else:
                     st.error("API key要以\"sk-\"开头")
-            else:
-                st.session_state.user_custom_key = ""
 
-            st.checkbox("流式输出", key="stream")
+            # on_change 在用户勾选/取消勾选时自动持久化存盘
+            st.checkbox("流式输出", key="stream", on_change=save_user_config)
 
     if st.button("退出登录", use_container_width=True, type="primary"):
         st.session_state.logged_in_user = None
+        st.session_state.user_custom_key = ""
+        st.session_state.stream = True
+        st.session_state.develop_mode = False
+        st.session_state.pop("config_loaded", None)
         clear_message()
 
 # ---------------- 计算最终使用的 API key ----------------
 final_api_key = ""
-# 保证存的不是口令 "API key"，否则给 OpenAI 初始化时会报错[cite: 4]
 if st.session_state.user_custom_key and st.session_state.user_custom_key.startswith("sk-"):
     final_api_key = st.session_state.user_custom_key
 elif st.session_state.develop_mode and "OPENAI_API_KEY" in st.secrets:
@@ -309,7 +375,8 @@ if is_admin and app_mode == "👑 管理员后台":
     st.title("👑 管理员控制台")
 
     all_users = get_users_db()
-    del all_users["admin"]
+    if "admin" in all_users:
+        del all_users["admin"]
 
     # 统计信息卡片
     col_u, col_s = st.columns(2)
@@ -323,39 +390,42 @@ if is_admin and app_mode == "👑 管理员后台":
 
     # 用户及会话调阅
     st.subheader("🔍 用户对话调阅")
-    selected_user = st.selectbox("选择要调阅的用户账号：", list(all_users.keys()))
+    if not all_users:
+        st.info("暂无普通注册用户。")
+    else:
+        selected_user = st.selectbox("选择要调阅的用户账号：", list(all_users.keys()))
 
-    if selected_user:
-        user_sessions = load_sessions(selected_user)
-        if not user_sessions:
-            st.info(f"用户 `{selected_user}` 暂无任何会话历史。")
-        else:
-            selected_session = st.selectbox("选择要调阅的会话记录：", user_sessions)
-            if selected_session:
-                session_file = f"users/{selected_user}/sessions/{selected_session}.json"
-                if os.path.exists(session_file):
-                    with open(session_file, "r", encoding="utf-8") as f:
-                        s_data = json.load(f)
+        if selected_user:
+            user_sessions = load_sessions(selected_user)
+            if not user_sessions:
+                st.info(f"用户 `{selected_user}` 暂无任何会话历史。")
+            else:
+                selected_session = st.selectbox("选择要调阅的会话记录：", user_sessions)
+                if selected_session:
+                    session_file = f"users/{selected_user}/sessions/{selected_session}.json"
+                    if os.path.exists(session_file):
+                        with open(session_file, "r", encoding="utf-8") as f:
+                            s_data = json.load(f)
 
-                    # 展示该会话的设定参数
-                    with st.expander("📄 查看该会话的设定背景", expanded=False):
-                        st.json({
-                            "角色称呼": s_data.get("nick_name"),
-                            "角色形象": s_data.get("nature"),
-                            "关系定义": s_data.get("relationship"),
-                            "自定义模式": s_data.get("custom_prompt_mode"),
-                            "自定义提示词": s_data.get("custom_system_prompt")
-                        })
+                        # 展示该会话的设定参数
+                        with st.expander("📄 查看该会话的设定背景", expanded=False):
+                            st.json({
+                                "角色称呼": s_data.get("nick_name"),
+                                "角色形象": s_data.get("nature"),
+                                "关系定义": s_data.get("relationship"),
+                                "自定义模式": s_data.get("custom_prompt_mode"),
+                                "自定义提示词": s_data.get("custom_system_prompt")
+                            })
 
-                    st.divider()
+                        st.divider()
 
-                    st.subheader(f"💬 对话记录明细 ({selected_session})")
-                    messages = s_data.get("messages", [])
-                    if not messages:
-                        st.write("该会话没有对话记录。")
-                    else:
-                        for msg in messages:
-                            st.chat_message(msg["role"]).write(msg["content"])
+                        st.subheader(f"💬 对话记录明细 ({selected_session})")
+                        messages = s_data.get("messages", [])
+                        if not messages:
+                            st.write("该会话没有对话记录。")
+                        else:
+                            for msg in messages:
+                                st.chat_message(msg["role"]).write(msg["content"])
 
 
 # ==================== 视图二：正常聊天界面 ====================
