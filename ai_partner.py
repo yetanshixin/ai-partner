@@ -58,8 +58,7 @@ def load_user_config(username=None):
         "user_custom_key": "",
         "stream": True,
         "develop_mode": False,
-        "thinking_mode": False,
-        "reasoning_effort": "default"
+        "reasoning_effort": "none"
     }
     if os.path.exists(config_path):
         try:
@@ -78,7 +77,7 @@ def save_user_config():
     config_path = get_user_config_path(username)
     config_data = load_user_config(username)
 
-    for key in ["user_custom_key", "stream", "develop_mode", "thinking_mode", "reasoning_effort"]:
+    for key in ["user_custom_key", "stream", "develop_mode", "reasoning_effort"]:
         if key in st.session_state:
             config_data[key] = st.session_state[key]
 
@@ -92,7 +91,7 @@ def save_user_config():
 def sync_user_config(username):
     """每次脚本运行，强行确保配置存在于 session_state，免疫 st.rerun 的 Key 丢失问题"""
     cfg = load_user_config(username)
-    for k in ["stream", "develop_mode", "thinking_mode", "reasoning_effort", "user_custom_key"]:
+    for k in ["stream", "develop_mode", "reasoning_effort", "user_custom_key"]:
         if k not in st.session_state:
             st.session_state[k] = cfg.get(k)
 
@@ -282,11 +281,10 @@ with st.sidebar:
         st.divider()
         st.subheader("角色设置")
 
-        # 取消原生 key 绑定，使用显式判断
         new_custom_mode = st.checkbox("自定义模式", value=st.session_state.custom_prompt_mode)
         if new_custom_mode != st.session_state.custom_prompt_mode:
             st.session_state.custom_prompt_mode = new_custom_mode
-            st.rerun()  # 强制立刻刷新组件
+            st.rerun()
 
         if st.session_state.custom_prompt_mode:
             custom_prompt = st.text_area("自定义背景设定", value=st.session_state.custom_system_prompt, height=180)
@@ -306,9 +304,7 @@ with st.sidebar:
 
         st.divider()
 
-        # 高级配置（解耦 Key 与 On_Change 问题）
         with st.expander('⚙️ 高级配置'):
-            # API Key 处理
             new_key = st.text_input("输入 API key", value=st.session_state.user_custom_key, placeholder="sk-xxx",
                                     type="password")
             if new_key != st.session_state.user_custom_key:
@@ -318,32 +314,21 @@ with st.sidebar:
                 else:
                     st.error("API key要以\"sk-\"开头")
 
-            # 流式输出处理
             new_stream = st.checkbox("流式输出", value=st.session_state.stream)
             if new_stream != st.session_state.stream:
                 st.session_state.stream = new_stream
                 save_user_config()
                 st.rerun()
 
-            # 显式判断思考模式变化
-            new_thinking = st.checkbox("思考模式", value=st.session_state.thinking_mode)
-            if new_thinking != st.session_state.thinking_mode:
-                st.session_state.thinking_mode = new_thinking
+            options = ["none", "low", "high", "max"]
+            current_val = st.session_state.get("reasoning_effort", "none")
+            idx = options.index(current_val) if current_val in options else 0
+
+            new_effort = st.selectbox("思考强度", options=options, index=idx, help="选择 none 将关闭思考模式")
+            if new_effort != st.session_state.reasoning_effort:
+                st.session_state.reasoning_effort = new_effort
                 save_user_config()
-                st.rerun()
 
-            # 根据 state 决定是否渲染选项
-            if st.session_state.thinking_mode:
-                options = ["default", "high", "max"]
-                current_val = st.session_state.reasoning_effort
-                idx = options.index(current_val) if current_val in options else 0
-
-                new_effort = st.selectbox("思考强度", options=options, index=idx)
-                if new_effort != st.session_state.reasoning_effort:
-                    st.session_state.reasoning_effort = new_effort
-                    save_user_config()
-
-        # 账户管理模块：修改密码
         with st.expander('🔐 密码修改'):
             mod_old_pwd = st.text_input("原密码", type="password", key="mod_old")
             mod_new_pwd = st.text_input("新密码", type="password", key="mod_new")
@@ -368,8 +353,7 @@ with st.sidebar:
         st.session_state.user_custom_key = ""
         st.session_state.stream = True
         st.session_state.develop_mode = False
-        st.session_state.thinking_mode = False
-        st.session_state.reasoning_effort = "default"
+        st.session_state.reasoning_effort = "none"
         clear_message()
 
 # ---------------- 计算最终使用的 API key ----------------
@@ -396,7 +380,6 @@ if is_admin and app_mode == "👑 管理员后台":
             st.rerun()
 
     all_users = get_users_db()
-    # 后台管理页面剔除 admin 账号，防止自己删自己
     if "admin" in all_users:
         del all_users["admin"]
 
@@ -409,29 +392,24 @@ if is_admin and app_mode == "👑 管理员后台":
 
     st.divider()
 
-    # 用户管理 (密码查看与账号删除)
     st.subheader("👥 用户管理")
     if not all_users:
         st.info("暂无普通注册用户。")
     else:
-        # 1. 列表查看账号密码
         user_table_data = [{"账号名称": u, "账号密码": p} for u, p in all_users.items()]
         st.dataframe(user_table_data, use_container_width=True, hide_index=True)
 
-        # 2. 彻底删除账号功能
         st.markdown("##### 🗑️ 账号删除")
         col_del1, col_del2 = st.columns([3, 1])
         with col_del1:
             user_to_delete = st.selectbox("请选择要销毁的账号", list(all_users.keys()), label_visibility="collapsed")
         with col_del2:
             if st.button("彻底删除", type="primary", use_container_width=True):
-                # 从字典和 JSON 中移除
                 db = get_users_db()
                 if user_to_delete in db:
                     del db[user_to_delete]
                     save_users_db(db)
 
-                    # 彻底销毁该账号的磁盘文件夹（配置+聊天记录）
                     target_dir = f"users/{user_to_delete}"
                     if os.path.exists(target_dir):
                         shutil.rmtree(target_dir)
@@ -513,21 +491,21 @@ else:
         for m in st.session_state.messages:
             api_messages.append({"role": m["role"], "content": m["content"]})
 
+        # 根据所选强度，决定如何传参
+        effort_choice = st.session_state.get("reasoning_effort", "none")
+
         api_kwargs = {
             "model": "deepseek-v4-pro",
             "messages": api_messages,
             "stream": st.session_state.get("stream", True),
         }
 
-        if st.session_state.get("thinking_mode", False):
-            api_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
-            effort = st.session_state.get("reasoning_effort", "default")
-            if effort != "default":
-                api_kwargs["reasoning_effort"] = effort
-            else:
-                api_kwargs["reasoning_effort"] = None
-        else:
+        # 兼容 OpenAI 的传参格式
+        if effort_choice == "none":
             api_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        else:
+            api_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+            api_kwargs["reasoning_effort"] = effort_choice
 
         try:
             response = client.chat.completions.create(**api_kwargs)
@@ -551,9 +529,11 @@ else:
                     status = None
                     reasoning_placeholder = None
                     content_placeholder = st.empty()
-                    if st.session_state.get("thinking_mode", False):
+
+                    if st.session_state.get("reasoning_effort", "none") != "none":
                         status = st.status("正在思考...", expanded=True)
                         reasoning_placeholder = status.empty()
+
                     for chunk in response:
                         delta = chunk.choices[0].delta
                         r_content = getattr(delta, 'reasoning_content', '') or ""
