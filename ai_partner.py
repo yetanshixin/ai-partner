@@ -18,7 +18,10 @@ USERS_DB_PATH = "users/users_db.json"
 # ---------------- 用户与数据存储辅助函数 ----------------
 def get_users_db():
     """读取所有注册用户信息，默认包含 admin 管理员"""
-    db = {"admin": "46108713"}  # 默认初始化管理员账号密码
+    if "ADMIN_PASSWORD" in st.secrets:
+        db = {"admin": st.secrets["ADMIN_PASSWORD"]}
+    else:
+        db = {"admin": "123"}  # 默认初始化管理员账号密码
     if os.path.exists(USERS_DB_PATH):
         with open(USERS_DB_PATH, "r", encoding="utf-8") as f:
             file_db = json.load(f)
