@@ -213,7 +213,7 @@ with st.sidebar:
             if st.session_state.user_custom_key == "API key":
                 st.session_state.egg_clicks += 1
             if st.session_state.egg_clicks >= 7 and not st.session_state.develop_mode:
-                st.toast("🎉 彩蛋已触发！现已启用开发者 API Key,可以直接对话了！", icon="🔑", duration="infinite")
+                st.toast("🎉 彩蛋已触发！现已启用开发者 API key,可以直接对话了！", icon="🔑", duration="infinite")
                 st.session_state.develop_mode = True
     with col_title:
         st.markdown(f"`{st.session_state.logged_in_user}`" + (" 👑" if is_admin else ""))
@@ -291,7 +291,7 @@ with st.sidebar:
         st.session_state.logged_in_user = None
         clear_message()
 
-# ---------------- 计算最终使用的 API Key ----------------
+# ---------------- 计算最终使用的 API key ----------------
 final_api_key = ""
 # 保证存的不是口令 "API key"，否则给 OpenAI 初始化时会报错[cite: 4]
 if st.session_state.user_custom_key and st.session_state.user_custom_key.startswith("sk-"):
@@ -377,7 +377,7 @@ else:
     prompt = st.chat_input("请输入你要说的话：")
     if prompt:
         if not final_api_key:
-            st.error("无法发送消息：请在侧边栏【高级配置】中填入 API Key！")
+            st.error("无法发送消息：请在侧边栏【高级配置】中填入 API key！")
             st.stop()
 
         st.chat_message("user").write(prompt)
