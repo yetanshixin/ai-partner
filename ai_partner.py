@@ -88,6 +88,18 @@ def save_user_config():
         st.error(f"保存配置失败: {e}")
 
 
+def update_user_config_value(username, key, value):
+    """管理员专用：直接修改指定用户的某项配置"""
+    config_path = get_user_config_path(username)
+    config_data = load_user_config(username)
+    config_data[key] = value
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        st.error(f"修改账号 {username} 配置失败: {e}")
+
+
 def sync_user_config(username):
     """每次脚本运行，强行确保配置存在于 session_state，免疫 st.rerun 的 Key 丢失问题"""
     cfg = load_user_config(username)
@@ -396,15 +408,39 @@ if is_admin and app_mode == "👑 管理员后台":
     if not all_users:
         st.info("暂无普通注册用户。")
     else:
-        user_table_data = [{"账号名称": u, "账号密码": p} for u, p in all_users.items()]
+        # 获取增强的账号属性表
+        user_table_data = []
+        for u, p in all_users.items():
+            u_cfg = load_user_config(u)
+            user_table_data.append({
+                "账号名称": u,
+                "账号密码": p,
+                "API Key": "未设置" if not u_cfg.get("user_custom_key") else u_cfg.get("user_custom_key"),
+                "开发者模式": "✅ 开启" if u_cfg.get("develop_mode", False) else "❌ 关闭",
+                "流式输出": "✅ 开启" if u_cfg.get("stream", True) else "❌ 关闭",
+                "思考强度": u_cfg.get("reasoning_effort", "none")
+            })
+
         st.dataframe(user_table_data, use_container_width=True, hide_index=True)
 
-        st.markdown("##### 🗑️ 账号删除")
-        col_del1, col_del2 = st.columns([3, 1])
-        with col_del1:
-            user_to_delete = st.selectbox("请选择要销毁的账号", list(all_users.keys()), label_visibility="collapsed")
-        with col_del2:
-            if st.button("彻底删除", type="primary", use_container_width=True):
+        # 操作分栏
+        col_op1, col_op2 = st.columns(2)
+
+        with col_op1:
+            st.markdown("##### 🛠️ 权限控制")
+            dev_user_selected = st.selectbox("选择要设置的账号", list(all_users.keys()), key="dev_select",
+                                             help="允许账号免key直接调用服务端secrets提供的环境变量额度")
+            if dev_user_selected:
+                curr_dev_mode = load_user_config(dev_user_selected).get("develop_mode", False)
+                if st.button("关闭开发者模式" if curr_dev_mode else "开启开发者模式", use_container_width=True):
+                    update_user_config_value(dev_user_selected, "develop_mode", not curr_dev_mode)
+                    st.success(f"已{'关闭' if curr_dev_mode else '开启'} `{dev_user_selected}` 的开发者模式！")
+                    st.rerun()
+
+        with col_op2:
+            st.markdown("##### 🗑️ 账号销毁")
+            user_to_delete = st.selectbox("选择要销毁的账号", list(all_users.keys()), key="del_select")
+            if st.button("彻底删除该用户", type="primary", use_container_width=True):
                 db = get_users_db()
                 if user_to_delete in db:
                     del db[user_to_delete]
