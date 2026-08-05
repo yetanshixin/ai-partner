@@ -417,7 +417,7 @@ if is_admin and app_mode == "👑 管理员后台":
             user_table_data.append({
                 "账号名称": u,
                 "账号密码": p,
-                "API Key": "未设置" if not u_cfg.get("user_custom_key") else u_cfg.get("user_custom_key"),
+                "API key": "未设置" if not u_cfg.get("user_custom_key") else u_cfg.get("user_custom_key"),
                 "流式输出": "✅ 开启" if u_cfg.get("stream", True) else "❌ 关闭",
                 "思考强度": u_cfg.get("reasoning_effort", "none"),
                 "开发者模式": bool(u_cfg.get("develop_mode", False))
@@ -428,7 +428,7 @@ if is_admin and app_mode == "👑 管理员后台":
             use_container_width=True,
             hide_index=True,
             key="admin_users_table",
-            disabled=["账号名称", "账号密码", "API Key", "流式输出", "思考强度"],
+            disabled=["账号名称", "账号密码", "API key", "流式输出", "思考强度"],
             column_config={
                 "开发者模式": st.column_config.CheckboxColumn(
                     "开发者模式",
