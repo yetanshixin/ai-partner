@@ -267,7 +267,9 @@ with st.sidebar:
                 st.session_state.develop_mode = True
                 save_user_config()
     with col_title:
-        st.markdown(f"`{st.session_state.logged_in_user}`" + (" 👑" if is_admin else ""))
+        st.markdown(
+            f"`{st.session_state.logged_in_user}`" + (" 🔑" if st.session_state.get("develop_mode", False) else "") + (
+                " 👑" if is_admin else ""))
 
     if is_admin:
         app_mode = st.radio("切换视图", ["💬 聊天界面", "👑 管理员后台"], key="radio_app_mode")
