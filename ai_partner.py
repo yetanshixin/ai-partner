@@ -268,7 +268,7 @@ with st.sidebar:
                 save_user_config()
     with col_title:
         st.markdown(
-            f"`{st.session_state.logged_in_user}`" + (" 🔑" if st.session_state.get("develop_mode", False) else "") + (
+            f"`{st.session_state.logged_in_user}`" + (" 🔓️" if st.session_state.get("develop_mode", False) else "") + (
                 " 👑" if is_admin else ""))
 
     if is_admin:
