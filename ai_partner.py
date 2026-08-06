@@ -57,6 +57,7 @@ def load_user_config(username=None):
     default_config = {
         "user_custom_key": "",
         "stream": True,
+        "model_choice": "deepseek-v4-flash",
         "develop_mode": False,
         "reasoning_effort": "none"
     }
@@ -77,7 +78,7 @@ def save_user_config():
     config_path = get_user_config_path(username)
     config_data = load_user_config(username)
 
-    for key in ["user_custom_key", "stream", "develop_mode", "reasoning_effort"]:
+    for key in ["user_custom_key", "stream", "model_choice", "develop_mode", "reasoning_effort"]:
         if key in st.session_state:
             config_data[key] = st.session_state[key]
 
@@ -103,7 +104,7 @@ def update_user_config_value(username, key, value):
 def sync_user_config(username):
     """每次脚本运行，强行确保配置存在于 session_state，免疫 st.rerun 的 Key 丢失问题"""
     cfg = load_user_config(username)
-    for k in ["stream", "develop_mode", "reasoning_effort", "user_custom_key"]:
+    for k in ["stream", "model_choice", "develop_mode", "reasoning_effort", "user_custom_key"]:
         if k not in st.session_state:
             st.session_state[k] = cfg.get(k)
 
@@ -263,7 +264,7 @@ with st.sidebar:
             if st.session_state.get("user_custom_key") == "API key":
                 st.session_state.egg_clicks += 1
             if st.session_state.egg_clicks >= 7 and not st.session_state.get("develop_mode", False):
-                st.toast("🎉 彩蛋已触发！现已启用开发者 API key,可以直接对话了！", icon="🔑", duration="infinite")
+                st.toast("🎉 彩蛋已触发~现已启用开发者 API key，可以开始对话了！", icon="🔑", duration="infinite")
                 st.session_state.develop_mode = True
                 save_user_config()
     with col_title:
@@ -330,11 +331,14 @@ with st.sidebar:
                 else:
                     st.error("API key要以\"sk-\"开头")
 
-            new_stream = st.checkbox("流式输出", value=st.session_state.stream, key="chk_stream")
-            if new_stream != st.session_state.stream:
-                st.session_state.stream = new_stream
+            model_options = ["deepseek-v4-flash", "deepseek-v4-pro"]
+            current_model = st.session_state.get("model_choice", "deepseek-v4-flash")
+            model_idx = model_options.index(current_model) if current_model in model_options else 0
+
+            new_model = st.selectbox("模型选择", options=model_options, index=model_idx, key="sel_model")
+            if new_model != st.session_state.model_choice:
+                st.session_state.model_choice = new_model
                 save_user_config()
-                st.rerun()
 
             options = ["none", "low", "high", "max"]
             current_val = st.session_state.get("reasoning_effort", "none")
@@ -345,6 +349,12 @@ with st.sidebar:
             if new_effort != st.session_state.reasoning_effort:
                 st.session_state.reasoning_effort = new_effort
                 save_user_config()
+
+            new_stream = st.checkbox("流式输出", value=st.session_state.stream, key="chk_stream")
+            if new_stream != st.session_state.stream:
+                st.session_state.stream = new_stream
+                save_user_config()
+                st.rerun()
 
         with st.expander('🔐 密码修改'):
             mod_old_pwd = st.text_input("原密码", type="password", key="mod_old")
@@ -369,6 +379,7 @@ with st.sidebar:
         st.session_state.logged_in_user = None
         st.session_state.user_custom_key = ""
         st.session_state.stream = True
+        st.session_state.model_choice = "deepseek-v4-flash"
         st.session_state.develop_mode = False
         st.session_state.reasoning_effort = "none"
         clear_message()
@@ -420,8 +431,9 @@ if is_admin and app_mode == "👑 管理员后台":
                 "账号名称": u,
                 "账号密码": p,
                 "API key": "未设置" if not u_cfg.get("user_custom_key") else u_cfg.get("user_custom_key"),
-                "流式输出": "✅ 开启" if u_cfg.get("stream", True) else "❌ 关闭",
+                "选用模型": u_cfg.get("model_choice", "deepseek-v4-flash"),  # 新增管理员数据列
                 "思考强度": u_cfg.get("reasoning_effort", "none"),
+                "流式输出": "✅" if u_cfg.get("stream", True) else "❌",
                 "开发者模式": bool(u_cfg.get("develop_mode", False))
             })
 
@@ -430,7 +442,7 @@ if is_admin and app_mode == "👑 管理员后台":
             use_container_width=True,
             hide_index=True,
             key="admin_users_table",
-            disabled=["账号名称", "账号密码", "API key", "流式输出", "思考强度"],
+            disabled=["账号名称", "账号密码", "API key", "选用模型", "思考强度", "流式输出"],
             column_config={
                 "开发者模式": st.column_config.CheckboxColumn(
                     "开发者模式",
@@ -545,8 +557,9 @@ else:
         # 根据所选强度，决定如何传参
         effort_choice = st.session_state.get("reasoning_effort", "none")
 
+        # 动态指定选用的模型
         api_kwargs = {
-            "model": "deepseek-v4-pro",
+            "model": st.session_state.get("model_choice", "deepseek-v4-flash"),
             "messages": api_messages,
             "stream": st.session_state.get("stream", True),
         }
