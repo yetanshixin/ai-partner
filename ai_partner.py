@@ -19,10 +19,12 @@ DB_PATH = "users/users.db"
 
 # ---------------- SQLite 数据库操作辅助函数 ----------------
 def init_db():
-    """初始化数据库表，并自动迁移旧 JSON 数据（若存在）"""
+    """初始化数据库表，并自动处理旧版本字段兼容和 JSON 迁移"""
     os.makedirs("users", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
+    # 尝试按新结构创建表（如果表不存在）
     cursor.execute('''
                    CREATE TABLE IF NOT EXISTS users
                    (
@@ -36,6 +38,15 @@ def init_db():
                        NULL
                    )
                    ''')
+
+    # 检查当前表结构，判断是否存在旧的 password_hash 字段
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [col[1] for col in cursor.fetchall()]
+
+    # 如果存在旧字段，直接把列名重命名，无缝兼容
+    if "password_hash" in columns and "password" not in columns:
+        cursor.execute("ALTER TABLE users RENAME COLUMN password_hash TO password")
+
     conn.commit()
     conn.close()
 
