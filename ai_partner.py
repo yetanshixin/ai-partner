@@ -562,7 +562,6 @@ if is_admin and app_mode == "👑 管理员后台":
         if has_changed:
             st.rerun()
 
-        st.markdown("##### ⚙️ 账号操作")
         col_sel, col_reset, col_del = st.columns([2, 1, 1])
         with col_sel:
             target_user = st.selectbox("请选择要操作的账号", [u[0] for u in all_users], label_visibility="collapsed",
